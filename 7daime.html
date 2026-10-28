@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyLog - 学習管理アプリ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans JP', 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 1. ログイン / アカウント作成画面 -->
+    <div id="auth-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 sm:p-8 w-full max-w-md">
+            <div class="text-center mb-6">
+                <div class="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <h2 class="text-xl font-bold text-slate-800">StudyLog へようこそ</h2>
+                <p class="text-xs text-slate-500 mt-1">ユーザー名とパスワードのみでログインできます<br>（個人情報の入力は不要です）</p>
+            </div>
+
+            <div id="auth-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl font-medium"></div>
+
+            <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">ユーザー名</label>
+                    <input type="text" id="auth-username" placeholder="例: tanaka" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">パスワード</label>
+                    <input type="password" id="auth-password" placeholder="••••••••" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div class="pt-2 flex flex-col gap-2">
+                    <button type="submit" id="btn-login" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl text-sm transition shadow-sm">
+                        ログイン
+                    </button>
+                    <button type="button" onclick="handleRegister()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 rounded-xl text-sm transition">
+                        新規アカウント作成
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6 pt-4 border-t border-slate-100 flex justify-center gap-4 text-xs">
+                <button onclick="exportAllData()" class="text-indigo-600 hover:underline font-medium"><i class="fa-solid fa-download mr-1"></i>バックアップ</button>
+                <label class="text-indigo-600 hover:underline font-medium cursor-pointer">
+                    <i class="fa-solid fa-upload mr-1"></i>復元
+                    <input type="file" id="import-file-auth" accept=".json" onchange="importAllData(event)" class="hidden">
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. アプリ本体 -->
+    <div id="app-content" class="hidden min-h-screen flex flex-col">
+        <header class="bg-indigo-600 text-white shadow-md">
+            <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center flex-wrap gap-2">
+                <div class="flex items-center gap-3">
+                    <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
+                        <i class="fa-solid fa-graduation-cap"></i>StudyLog
+                    </h1>
+                    <!-- 通知許可ボタン -->
+                    <button onclick="requestNotificationPermission()" id="notification-btn" class="bg-indigo-700 hover:bg-indigo-800 text-xs px-2.5 py-1.5 rounded-lg font-medium transition border border-indigo-400 flex items-center gap-1">
+                        <i class="fa-solid fa-bell"></i> <span id="notification-btn-text">通知を有効にする</span>
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div class="text-xs bg-indigo-700/80 px-3 py-1.5 rounded-lg border border-indigo-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-circle"></i>
+                        <span id="current-user-display" class="font-bold">ユーザー名</span>
+                    </div>
+                    
+                    <button onclick="exportAllData()" title="バックアップ" class="bg-indigo-700 hover:bg-indigo-800 text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 border border-indigo-500">
+                        <i class="fa-solid fa-download"></i>
+                    </button>
+                    <label title="復元" class="bg-indigo-700 hover:bg-indigo-800 text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 border border-indigo-500 cursor-pointer">
+                        <i class="fa-solid fa-upload"></i>
+                        <input type="file" id="import-file-app" accept=".json" onchange="importAllData(event)" class="hidden">
+                    </label>
+
+                    <button onclick="logout()" class="bg-indigo-700 hover:bg-indigo-800 text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 border border-indigo-500">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- タブナビゲーション -->
+        <nav class="bg-white border-b border-slate-200 shadow-xs sticky top-0 z-10">
+            <div class="max-w-4xl mx-auto flex overflow-x-auto">
+                <button onclick="switchTab('timer')" id="btn-timer" class="flex-1 min-w-[80px] py-3 text-center text-xs sm:text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition">
+                    <i class="fa-solid fa-stopwatch mr-1"></i>タイマー
+                </button>
+                <button onclick="switchTab('missions')" id="btn-missions" class="flex-1 min-w-[80px] py-3 text-center text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition">
+                    <i class="fa-solid fa-list-check mr-1"></i>ミッション
+                </button>
+                <button onclick="switchTab('schedule')" id="btn-schedule" class="flex-1 min-w-[80px] py-3 text-center text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition">
+                    <i class="fa-solid fa-calendar-days mr-1"></i>タイム予定
+                </button>
+                <button onclick="switchTab('graphs')" id="btn-graphs" class="flex-1 min-w-[80px] py-3 text-center text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition">
+                    <i class="fa-solid fa-chart-pie mr-1"></i>グラフ
+                </button>
+                <button onclick="switchTab('subjects')" id="btn-subjects" class="flex-1 min-w-[80px] py-3 text-center text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition">
+                    <i class="fa-solid fa-book mr-1"></i>教科設定
+                </button>
+            </div>
+        </nav>
+
+        <!-- メインコンテンツ -->
+        <main class="max-w-4xl mx-auto px-4 py-6 flex-1 w-full pb-20">
+
+            <!-- 1. タイマータブ -->
+            <section id="tab-timer" class="space-y-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-bold mb-4 text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-clock text-indigo-600"></i>学習タイマー
+                    </h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">教科を選択</label>
+                            <select id="timer-subject" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">学習内容メモ</label>
+                            <input type="text" id="timer-memo-title" placeholder="例：ワーク P.12〜15" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="text-center py-6 bg-slate-900 text-white rounded-2xl shadow-inner mb-6">
+                        <div id="stopwatch-display" class="text-5xl font-mono font-bold tracking-wider mb-4">00:00:00</div>
+                        <div class="flex justify-center gap-2 sm:gap-3 flex-wrap">
+                            <button id="start-btn" onclick="startTimer()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition shadow-sm">
+                                <i class="fa-solid fa-play mr-1"></i>スタート
+                            </button>
+                            <button id="pause-btn" onclick="pauseTimer()" class="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition shadow-sm hidden">
+                                <i class="fa-solid fa-pause mr-1"></i>一時停止
+                            </button>
+                            <button onclick="resetTimer()" class="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition shadow-sm">
+                                <i class="fa-solid fa-rotate-right mr-1"></i>リセット
+                            </button>
+                            <button onclick="saveStudyLog()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition shadow-sm">
+                                <i class="fa-solid fa-floppy-disk mr-1"></i>記録保存
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">今日やった範囲と詳細メモ</label>
+                        <textarea id="timer-memo-detail" rows="3" placeholder="例：計算問題でケアレスミスが多かったので、明日もう一度見直す。" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h3 class="text-md font-bold mb-3 text-slate-700"><i class="fa-solid fa-history mr-2 text-indigo-600"></i>最近の学習記録</h3>
+                    <div id="recent-logs-list" class="space-y-2"></div>
+                </div>
+            </section>
+
+            <!-- 2. ミッションタブ -->
+            <section id="tab-missions" class="space-y-6 hidden">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
+                        <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-bullseye text-indigo-600"></i>今日のミッション
+                        </h2>
+                        
+                        <div class="flex items-center gap-2 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-xl">
+                            <span class="text-xs font-bold text-indigo-900"><i class="fa-solid fa-hourglass-half mr-1"></i>今日の全体目標:</span>
+                            <input type="number" id="daily-total-budget" min="10" step="10" value="90" onchange="updateTotalBudget(this.value)" class="w-16 bg-white border border-indigo-200 rounded-lg px-2 py-1 text-sm font-bold text-center text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <span class="text-xs text-indigo-900 font-medium">分</span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center mb-3">
+                        <p class="text-xs text-slate-500">今日のタイムスケジュール予定も以下に自動反映されます。</p>
+                        <button onclick="resetDailyMissions()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition font-medium">
+                            <i class="fa-solid fa-rotate-right mr-1"></i>チェックをリセット
+                        </button>
+                    </div>
+
+                    <div id="today-missions-container" class="space-y-3"></div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-bold mb-4 text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-indigo-600"></i>テスト範囲・提出物・目標設定
+                    </h2>
+                    
+                    <form id="exam-form" onsubmit="saveExam(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">教科</label>
+                            <select id="exam-subject" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">テスト / 提出物名</label>
+                            <input type="text" id="exam-title" placeholder="例：数学 ワークP20〜40" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">総ページ数 (または問題数)</label>
+                            <input type="number" id="exam-pages" min="1" placeholder="20" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">テスト・提出期限 (日時)</label>
+                            <input type="datetime-local" id="exam-deadline" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">1ページあたりの目安時間 (分)</label>
+                            <input type="number" id="exam-time-per-page" min="1" value="5" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">優先順位 (優先度)</label>
+                            <select id="exam-priority" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium">
+                                <option value="3">🔥 高 (一番力を入れる)</option>
+                                <option value="2" selected>⚡ 中 (普通)</option>
+                                <option value="1">💧 低 (後回しでもOK)</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2 flex items-center gap-2 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                            <input type="checkbox" id="exam-repeating" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500" checked>
+                            <div>
+                                <label for="exam-repeating" class="text-xs font-bold text-indigo-900 cursor-pointer">🔄 期末テストモード（周回モード）</label>
+                                <p class="text-[11px] text-indigo-700">1周終わっても期限まで何度でも繰り返し今日のミッションに表示させます。</p>
+                            </div>
+                        </div>
+                        <div class="sm:col-span-2 flex justify-end">
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition">
+                                <i class="fa-solid fa-plus mr-1"></i>登録する
+                            </button>
+                        </div>
+                    </form>
+
+                    <div id="exams-list" class="space-y-3"></div>
+                </div>
+            </section>
+
+            <!-- 3. タイム予定タブ (新規追加) -->
+            <section id="tab-schedule" class="space-y-6 hidden">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-bold mb-2 text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-days text-indigo-600"></i>曜日別 タイムスケジュール設定
+                    </h2>
+                    <p class="text-xs text-slate-500 mb-4">月曜は18:00〜19:00、火曜は16:00〜16:30のように時間帯を登録しておくと、その時間になったときにブラウザ通知でお知らせします。</p>
+
+                    <form id="schedule-form" onsubmit="saveScheduleItem(event)" class="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">曜日</label>
+                            <select id="sch-day" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+                                <option value="1">月曜日</option>
+                                <option value="2">火曜日</option>
+                                <option value="3">水曜日</option>
+                                <option value="4">木曜日</option>
+                                <option value="5">金曜日</option>
+                                <option value="6">土曜日</option>
+                                <option value="0">日曜日</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">開始時間</label>
+                            <input type="time" id="sch-start" value="18:00" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">終了時間</label>
+                            <input type="time" id="sch-end" value="19:00" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">教科</label>
+                            <select id="sch-subject" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" required></select>
+                        </div>
+                        <div class="sm:col-span-4 flex justify-end">
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition">
+                                <i class="fa-solid fa-plus mr-1"></i>予定を追加
+                            </button>
+                        </div>
+                    </form>
+
+                    <div id="schedule-list" class="space-y-3"></div>
+                </div>
+            </section>
+
+            <!-- 4. グラフタブ -->
+            <section id="tab-graphs" class="space-y-6 hidden">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                        <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie text-indigo-600"></i>学習時間分析
+                        </h2>
+                        <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-medium">
+                            <button onclick="changeGraphPeriod('day')" id="g-btn-day" class="px-3 py-1.5 rounded-lg bg-white shadow-xs text-indigo-600 transition">1日</button>
+                            <button onclick="changeGraphPeriod('week')" id="g-btn-week" class="px-3 py-1.5 rounded-lg text-slate-600 transition">1週間</button>
+                            <button onclick="changeGraphPeriod('month')" id="g-btn-month" class="px-3 py-1.5 rounded-lg text-slate-600 transition">1か月</button>
+                            <button onclick="changeGraphPeriod('total')" id="g-btn-total" class="px-3 py-1.5 rounded-lg text-slate-600 transition">累計</button>
+                        </div>
+                    </div>
+
+                    <div class="mb-4 text-center">
+                        <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider">選択期間の総学習時間</span>
+                        <div id="total-study-time-display" class="text-3xl font-extrabold text-slate-800">0時間 0分</div>
+                    </div>
+
+                    <div class="relative w-full h-72 flex justify-center">
+                        <canvas id="studyChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. 教科設定タブ -->
+            <section id="tab-subjects" class="space-y-6 hidden">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-bold mb-4 text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-book text-indigo-600"></i>教科の整理・色分け設定
+                    </h2>
+
+                    <form id="subject-form" onsubmit="saveSubject(event)" class="flex gap-2 mb-6">
+                        <input type="text" id="new-subject-name" placeholder="例：理科、社会" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                        <input type="color" id="new-subject-color" value="#4f46e5" class="w-12 h-10 rounded-xl border border-slate-200 cursor-pointer bg-slate-50 p-1">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition">追加</button>
+                    </form>
+
+                    <div id="subjects-list" class="space-y-2"></div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- JavaScript スクリプト -->
+    <script>
+        let users = JSON.parse(localStorage.getItem('studylog_users')) || {};
+        let currentUser = localStorage.getItem('studylog_current_user') || null;
+
+        let subjects = [];
+        let logs = [];
+        let exams = [];
+        let schedules = []; // 曜日別タイムスケジュール
+        let missionCompletions = {};
+        let dailyTotalBudget = 90;
+
+        let timerInterval = null;
+        let secondsElapsed = 0;
+        let isRunning = false;
+
+        let myChart = null;
+        let currentGraphPeriod = 'day';
+
+        // 通知チェック用タイマー
+        let notificationCheckerInterval = null;
+        let notifiedTimesToday = new Set(); // 今日すでに通知した時間帯のキー
+
+        window.onload = function() {
+            if (currentUser && users[currentUser]) {
+                loadUserData(currentUser);
+            } else {
+                showAuthModal();
+            }
+            startNotificationChecker();
+        };
+
+        function showAuthModal() {
+            document.getElementById('auth-modal').classList.remove('hidden');
+            document.getElementById('app-content').classList.add('hidden');
+        }
+
+        function hideAuthModal() {
+            document.getElementById('auth-modal').classList.add('hidden');
+            document.getElementById('app-content').classList.remove('hidden');
+        }
+
+        function showAuthError(msg) {
+            const errDiv = document.getElementById('auth-error');
+            errDiv.innerText = msg;
+            errDiv.classList.remove('hidden');
+        }
+
+        function handleAuth(e) {
+            e.preventDefault();
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+
+            if (!username || !password) return;
+
+            if (!users[username]) {
+                showAuthError('ユーザーが存在しません。「新規アカウント作成」を押してください。');
+                return;
+            }
+
+            if (users[username].password !== password) {
+                showAuthError('パスワードが正しくありません。');
+                return;
+            }
+
+            loginUser(username);
+        }
+
+        function handleRegister() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+
+            if (!username || !password) {
+                showAuthError('ユーザー名とパスワードを入力してください。');
+                return;
+            }
+
+            if (users[username]) {
+                showAuthError('そのユーザー名はすでに使用されています。');
+                return;
+            }
+
+            users[username] = {
+                password: password,
+                data: {
+                    subjects: [
+                        { id: '1', name: '国語', color: '#ef4444' },
+                        { id: '2', name: '数学', color: '#3b82f6' },
+                        { id: '3', name: '英語', color: '#10b981' },
+                        { id: '4', name: '理科', color: '#f59e0b' },
+                        { id: '5', name: '社会', color: '#8b5cf6' }
+                    ],
+                    logs: [],
+                    exams: [],
+                    schedules: [],
+                    missionCompletions: {},
+                    dailyTotalBudget: 90
+                }
+            };
+
+            localStorage.setItem('studylog_users', JSON.stringify(users));
+            alert('アカウントを作成しました！');
+            loginUser(username);
+        }
+
+        function loginUser(username) {
+            currentUser = username;
+            localStorage.setItem('studylog_current_user', username);
+            loadUserData(username);
+            hideAuthModal();
+        }
+
+        function logout() {
+            pauseTimer();
+            currentUser = null;
+            localStorage.removeItem('studylog_current_user');
+            document.getElementById('auth-username').value = '';
+            document.getElementById('auth-password').value = '';
+            document.getElementById('auth-error').classList.add('hidden');
+            showAuthModal();
+        }
+
+        function loadUserData(username) {
+            document.getElementById('current-user-display').innerText = username;
+            const userData = users[username].data;
+            subjects = userData.subjects || [];
+            logs = userData.logs || [];
+            exams = userData.exams || [];
+            schedules = userData.schedules || [];
+            missionCompletions = userData.missionCompletions || {};
+            dailyTotalBudget = userData.dailyTotalBudget !== undefined ? userData.dailyTotalBudget : 90;
+
+            document.getElementById('daily-total-budget').value = dailyTotalBudget;
+
+            updateSubjectSelects();
+            renderSubjectsList();
+            renderRecentLogs();
+            renderExamsList();
+            renderScheduleList();
+            renderMissions();
+            initChart();
+            updateTimerDisplay();
+            updateNotificationButtonUI();
+        }
+
+        function saveCurrentUserData() {
+            if (!currentUser || !users[currentUser]) return;
+            users[currentUser].data = {
+                subjects: subjects,
+                logs: logs,
+                exams: exams,
+                schedules: schedules,
+                missionCompletions: missionCompletions,
+                dailyTotalBudget: dailyTotalBudget
+            };
+            localStorage.setItem('studylog_users', JSON.stringify(users));
+        }
+
+        // --- ブラウザ通知の許可要求 ---
+        function requestNotificationPermission() {
+            if (!('Notification' in window)) {
+                alert('お使いのブラウザは通知機能に対応していません。');
+                return;
+            }
+
+            Notification.requestPermission().then(permission => {
+                updateNotificationButtonUI();
+                if (permission === 'granted') {
+                    new Notification('StudyLog', { body: '勉強時間の通知が有効になりました！設定時刻になるとお知らせします。' });
+                } else {
+                    alert('通知がブロックされました。ブラウザの設定から通知を許可してください。');
+                }
+            });
+        }
+
+        function updateNotificationButtonUI() {
+            const btn = document.getElementById('notification-btn');
+            const txt = document.getElementById('notification-btn-text');
+            if (!('Notification' in window)) {
+                btn.style.display = 'none';
+                return;
+            }
+
+            if (Notification.permission === 'granted') {
+                btn.className = 'bg-emerald-600 hover:bg-emerald-700 text-xs px-2.5 py-1.5 rounded-lg font-medium transition border border-emerald-400 flex items-center gap-1';
+                txt.innerText = '通知有効中';
+            } else if (Notification.permission === 'denied') {
+                btn.className = 'bg-red-600 hover:bg-red-700 text-xs px-2.5 py-1.5 rounded-lg font-medium transition border border-red-400 flex items-center gap-1';
+                txt.innerText = '通知ブロック中';
+            } else {
+                btn.className = 'bg-indigo-700 hover:bg-indigo-800 text-xs px-2.5 py-1.5 rounded-lg font-medium transition border border-indigo-400 flex items-center gap-1';
+                txt.innerText = '通知を有効にする';
+            }
+        }
+
+        // --- 定期的な時刻チェック（通知トリガー） ---
+        function startNotificationChecker() {
+            if (notificationCheckerInterval) clearInterval(notificationCheckerInterval);
+
+            notificationCheckerInterval = setInterval(() => {
+                if (!currentUser || Notification.permission !== 'granted') return;
+
+                const now = new Date();
+                const currentDay = now.getDay(); // 0(日)〜6(土)
+                const currentHour = String(now.getHours()).padStart(2, '0');
+                const currentMin = String(now.getMinutes()).padStart(2, '0');
+                const currentTimeStr = `${currentHour}:${currentMin}`;
+
+                schedules.forEach(sch => {
+                    if (parseInt(sch.day) === currentDay && sch.start === currentTimeStr) {
+                        const notificationKey = `${sch.id}_${now.toDateString()}`;
+                        if (!notifiedTimesToday.has(notificationKey)) {
+                            notifiedTimesToday.add(notificationKey);
+                            const sub = subjects.find(s => s.id === sch.subjectId) || { name: '勉強' };
+                            
+                            new Notification('⏰ 勉強の時間です！', {
+                                body: `${sch.start} 〜 ${sch.end} は「${sub.name}」の時間です。さっそく取り組みましょう！`,
+                                icon: ''
+                            });
+                        }
+                    }
+                });
+            }, 10000); // 10秒おきにチェック
+        }
+
+        // --- 曜日別スケジュール管理 ---
+        function saveScheduleItem(e) {
+            e.preventDefault();
+            const newItem = {
+                id: Date.now().toString(),
+                day: parseInt(document.getElementById('sch-day').value),
+                start: document.getElementById('sch-start').value,
+                end: document.getElementById('sch-end').value,
+                subjectId: document.getElementById('sch-subject').value
+            };
+
+            schedules.push(newItem);
+            // 時間順にソート
+            schedules.sort((a, b) => a.day - b.day || a.start.localeCompare(b.start));
+            saveCurrentUserData();
+            renderScheduleList();
+            renderMissions();
+            alert('タイムスケジュールを登録しました！');
+        }
+
+        function deleteScheduleItem(id) {
+            schedules = schedules.filter(s => s.id !== id);
+            saveCurrentUserData();
+            renderScheduleList();
+            renderMissions();
+        }
+
+        function renderScheduleList() {
+            const container = document.getElementById('schedule-list');
+            container.innerHTML = '';
+
+            if (schedules.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-400">登録されているタイムスケジュールはありません。</p>';
+                return;
+            }
+
+            const dayNames = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
+            let html = '';
+
+            schedules.forEach(sch => {
+                const sub = subjects.find(s => s.id === sch.subjectId) || { name: '不明', color: '#cbd5e1' };
+                html += `
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg">${dayNames[sch.day]}</span>
+                            <span class="font-bold text-slate-700">${sch.start} 〜 ${sch.end}</span>
+                            <span class="text-xs px-2 py-0.5 rounded text-white font-medium" style="background-color: ${sub.color}">${sub.name}</span>
+                        </div>
+                        <button onclick="deleteScheduleItem('${sch.id}')" class="text-slate-400 hover:text-red-500 transition px-2"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // --- データのエクスポート・インポート ---
+        function exportAllData() {
+            const backupData = { users: users, currentUser: currentUser, exportDate: new Date().toISOString() };
+            const jsonStr = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `studylog_backup_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importAllData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (!imported.users) { alert('無効なファイルです。'); return; }
+                    if (confirm('バックアップデータを復元しますか？')) {
+                        users = imported.users;
+                        localStorage.setItem('studylog_users', JSON.stringify(users));
+                        if (imported.currentUser && users[imported.currentUser]) {
+                            loginUser(imported.currentUser);
+                        } else {
+                            showAuthModal();
+                        }
+                        alert('復元が完了しました！');
+                    }
+                } catch (err) { alert('読み込みに失敗しました。'); }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function switchTab(tabId) {
+            ['timer', 'missions', 'schedule', 'graphs', 'subjects'].forEach(t => {
+                document.getElementById('tab-' + t).classList.add('hidden');
+                document.getElementById('btn-' + t).classList.remove('border-indigo-600', 'text-indigo-600');
+                document.getElementById('btn-' + t).classList.add('border-transparent', 'text-slate-500');
+            });
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            document.getElementById('btn-' + tabId).classList.add('border-indigo-600', 'text-indigo-600');
+            document.getElementById('btn-' + tabId).classList.remove('border-transparent', 'text-slate-500');
+
+            if (tabId === 'graphs') updateChart();
+        }
+
+        function startTimer() {
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('start-btn').classList.add('hidden');
+            document.getElementById('pause-btn').classList.remove('hidden');
+            timerInterval = setInterval(() => { secondsElapsed++; updateTimerDisplay(); }, 1000);
+        }
+
+        function pauseTimer() {
+            if (!isRunning) return;
+            isRunning = false;
+            clearInterval(timerInterval);
+            document.getElementById('start-btn').classList.remove('hidden');
+            document.getElementById('pause-btn').classList.add('hidden');
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            secondsElapsed = 0;
+            updateTimerDisplay();
+        }
+
+        function updateTimerDisplay() {
+            const h = String(Math.floor(secondsElapsed / 3600)).padStart(2, '0');
+            const m = String(Math.floor((secondsElapsed % 3600) / 60)).padStart(2, '0');
+            const s = String(secondsElapsed % 60).padStart(2, '0');
+            document.getElementById('stopwatch-display').innerText = `${h}:${m}:${s}`;
+        }
+
+        function saveStudyLog() {
+            if (secondsElapsed < 10) { alert('学習時間が短すぎます（10秒以上）。'); return; }
+            const subjectId = document.getElementById('timer-subject').value;
+            const memoTitle = document.getElementById('timer-memo-title').value.trim() || '学習セッション';
+            const memoDetail = document.getElementById('timer-memo-detail').value.trim();
+
+            logs.unshift({ id: Date.now().toString(), subjectId, duration: secondsElapsed, title: memoTitle, detail: memoDetail, date: new Date().toISOString() });
+            saveCurrentUserData();
+            resetTimer();
+            document.getElementById('timer-memo-title').value = '';
+            document.getElementById('timer-memo-detail').value = '';
+            renderRecentLogs();
+            alert('学習記録を保存しました！');
+        }
+
+        function updateSubjectSelects() {
+            const selects = [document.getElementById('timer-subject'), document.getElementById('exam-subject'), document.getElementById('sch-subject')];
+            selects.forEach(sel => {
+                if (!sel) return;
+                sel.innerHTML = '';
+                subjects.forEach(sub => {
+                    const opt = document.createElement('option');
+                    opt.value = sub.id;
+                    opt.innerText = sub.name;
+                    sel.appendChild(opt);
+                });
+            });
+        }
+
+        function saveSubject(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-subject-name').value.trim();
+            const color = document.getElementById('new-subject-color').value;
+            if (!name) return;
+            subjects.push({ id: Date.now().toString(), name, color });
+            saveCurrentUserData();
+            document.getElementById('new-subject-name').value = '';
+            updateSubjectSelects();
+            renderSubjectsList();
+        }
+
+        function deleteSubject(id) {
+            if (confirm('この教科を削除しますか？')) {
+                subjects = subjects.filter(s => s.id !== id);
+                saveCurrentUserData();
+                updateSubjectSelects();
+                renderSubjectsList();
+            }
+        }
+
+        function renderSubjectsList() {
+            const container = document.getElementById('subjects-list');
+            container.innerHTML = '';
+            if (subjects.length === 0) { container.innerHTML = '<p class="text-sm text-slate-400">教科が登録されていません。</p>'; return; }
+            subjects.forEach(sub => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200';
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="w-4 h-4 rounded-full inline-block" style="background-color: ${sub.color};"></span>
+                        <span class="font-medium text-sm">${sub.name}</span>
+                    </div>
+                    <button onclick="deleteSubject('${sub.id}')" class="text-slate-400 hover:text-red-500 text-sm transition"><i class="fa-solid fa-trash"></i></button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function renderRecentLogs() {
+            const container = document.getElementById('recent-logs-list');
+            container.innerHTML = '';
+            if (logs.length === 0) { container.innerHTML = '<p class="text-sm text-slate-400">まだ学習記録がありません。</p>'; return; }
+            logs.slice(0, 5).forEach(log => {
+                const sub = subjects.find(s => s.id === log.subjectId) || { name: '不明', color: '#cbd5e1' };
+                const d = new Date(log.date);
+                const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                const mins = Math.round(log.duration / 60);
+                const div = document.createElement('div');
+                div.className = 'p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-sm';
+                div.innerHTML = `
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs px-2 py-0.5 rounded text-white font-medium" style="background-color: ${sub.color}">${sub.name}</span>
+                            <span class="font-bold text-slate-700">${log.title}</span>
+                        </div>
+                        ${log.detail ? `<p class="text-xs text-slate-500">${log.detail}</p>` : ''}
+                        <span class="text-[10px] text-slate-400">${dateStr}</span>
+                    </div>
+                    <div class="font-bold text-indigo-600 text-base">${mins}分</div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function saveExam(e) {
+            e.preventDefault();
+            exams.push({
+                id: Date.now().toString(),
+                subjectId: document.getElementById('exam-subject').value,
+                title: document.getElementById('exam-title').value,
+                pages: parseInt(document.getElementById('exam-pages').value),
+                deadline: document.getElementById('exam-deadline').value,
+                timePerPage: parseInt(document.getElementById('exam-time-per-page').value),
+                priority: parseInt(document.getElementById('exam-priority').value),
+                repeating: document.getElementById('exam-repeating').checked
+            });
+            saveCurrentUserData();
+            document.getElementById('exam-form').reset();
+            document.getElementById('exam-repeating').checked = true;
+            renderExamsList();
+            renderMissions();
+        }
+
+        function deleteExam(id) {
+            exams = exams.filter(e => e.id !== id);
+            saveCurrentUserData();
+            renderExamsList();
+            renderMissions();
+        }
+
+        function renderExamsList() {
+            const container = document.getElementById('exams-list');
+            container.innerHTML = '';
+            if (exams.length === 0) { container.innerHTML = '<p class="text-sm text-slate-400">登録されているテスト範囲や提出物はありません。</p>'; return; }
+            exams.forEach(exam => {
+                const sub = subjects.find(s => s.id === exam.subjectId) || { name: '不明', color: '#cbd5e1' };
+                const diffDays = Math.ceil((new Date(exam.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+                let warningBadge = diffDays <= 7 && diffDays >= 0 ? `<span class="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold ml-2">⚠️ あと${diffDays}日</span>` : '';
+                let priorityText = exam.priority === 3 ? '🔥 高' : (exam.priority === 2 ? '⚡ 中' : '💧 低');
+                const div = document.createElement('div');
+                div.className = 'p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3';
+                div.innerHTML = `
+                    <div>
+                        <div class="flex items-center gap-2 mb-1 flex-wrap">
+                            <span class="text-xs px-2 py-0.5 rounded text-white font-medium" style="background-color: ${sub.color}">${sub.name}</span>
+                            <span class="font-bold text-slate-800 text-sm">${exam.title}</span>
+                            <span class="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold">${priorityText}</span>
+                            ${warningBadge}
+                        </div>
+                        <div class="text-xs text-slate-500 space-x-3">
+                            <span>総ページ: ${exam.pages}P</span>
+                            <span>期限: ${new Date(exam.deadline).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                    <button onclick="deleteExam('${exam.id}')" class="text-slate-400 hover:text-red-500 transition px-1"><i class="fa-solid fa-trash"></i></button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function toggleMissionCompletion(examId) {
+            const todayStr = new Date().toDateString();
+            const key = `${examId}_${todayStr}`;
+            missionCompletions[key] = !missionCompletions[key];
+            saveCurrentUserData();
+            renderMissions();
+        }
+
+        function resetDailyMissions() {
+            const todayStr = new Date().toDateString();
+            exams.forEach(exam => { delete missionCompletions[`${exam.id}_${todayStr}`]; });
+            saveCurrentUserData();
+            renderMissions();
+            alert('チェックをリセットしました！');
+        }
+
+        function updateTotalBudget(val) {
+            const parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed > 0) {
+                dailyTotalBudget = parsed;
+                saveCurrentUserData();
+                renderMissions();
+            }
+        }
+
+        function renderMissions() {
+            const container = document.getElementById('today-missions-container');
+            container.innerHTML = '';
+
+            const nowDay = new Date().getDay();
+            const todaysSchedules = schedules.filter(s => parseInt(s.day) === nowDay);
+
+            let html = '';
+
+            // 本日のタイムスケジュール予定カードを表示
+            if (todaysSchedules.length > 0) {
+                html += `<div class="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                    <div class="text-xs font-bold text-indigo-900 mb-2"><i class="fa-solid fa-clock mr-1"></i>本日のタイムスケジュール予定</div>
+                    <div class="space-y-1.5">`;
+                todaysSchedules.forEach(sch => {
+                    const sub = subjects.find(s => s.id === sch.subjectId) || { name: '不明', color: '#cbd5e1' };
+                    html += `<div class="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-indigo-100">
+                        <span class="font-bold text-slate-700">${sch.start} 〜 ${sch.end}</span>
+                        <span class="px-2 py-0.5 rounded text-white font-medium" style="background-color: ${sub.color}">${sub.name}</span>
+                    </div>`;
+                });
+                html += `</div></div>`;
+            }
+
+            if (exams.length === 0) {
+                container.innerHTML = html + '<p class="text-sm text-slate-400">登録されているテスト範囲や提出物はありません。「テスト範囲・提出物」タブから登録してみましょう。</p>';
+                return;
+            }
+
+            let totalWeight = 0;
+            exams.forEach(exam => {
+                const diffDays = Math.max(1, Math.ceil((new Date(exam.deadline) - new Date()) / (1000 * 60 * 60 * 24)));
+                let urgencyMultiplier = diffDays <= 7 ? (8 - diffDays) : 1;
+                totalWeight += (exam.priority || 2) * urgencyMultiplier;
+            });
+
+            const todayStr = new Date().toDateString();
+            exams.forEach(exam => {
+                const sub = subjects.find(s => s.id === exam.subjectId) || { name: '不明', color: '#cbd5e1' };
+                const key = `${exam.id}_${todayStr}`;
+                const isCompleted = !!missionCompletions[key];
+
+                const diffDays = Math.max(1, Math.ceil((new Date(exam.deadline) - new Date()) / (1000 * 60 * 60 * 24)));
+                let urgencyMultiplier = diffDays <= 7 ? (8 - diffDays) : 1;
+                let examWeight = (exam.priority || 2) * urgencyMultiplier;
+                let allocatedMins = totalWeight > 0 ? Math.round((examWeight / totalWeight) * dailyTotalBudget) : Math.round(dailyTotalBudget / exams.length);
+                allocatedMins = Math.max(5, Math.round(allocatedMins / 5) * 5);
+
+                html += `
+                    <div class="p-4 bg-slate-50 border ${isCompleted ? 'border-emerald-200 bg-emerald-50/40 opacity-75' : 'border-slate-200'} rounded-xl flex items-center justify-between transition">
+                        <div class="flex items-center gap-3">
+                            <input type="checkbox" ${isCompleted ? 'checked' : ''} onclick="toggleMissionCompletion('${exam.id}')" class="w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                            <div>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="text-xs px-2 py-0.5 rounded text-white font-medium" style="background-color: ${sub.color}">${sub.name}</span>
+                                    <span class="text-sm font-bold ${isCompleted ? 'line-through text-slate-400' : 'text-slate-800'}">${exam.title}</span>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1 flex items-center gap-3 flex-wrap">
+                                    <span>割当目安時間: <strong class="text-indigo-600 text-sm">${allocatedMins}分</strong></span>
+                                    <span>総ページ: ${exam.pages}P</span>
+                                    ${isCompleted ? '<span class="text-emerald-600 font-bold">✨ 本日のノルマ達成！</span>' : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('studyChart').getContext('2d');
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+            updateChartData();
+        }
+
+        function changeGraphPeriod(period) {
+            currentGraphPeriod = period;
+            ['day', 'week', 'month', 'total'].forEach(p => {
+                const btn = document.getElementById('g-btn-' + p);
+                if (p === period) {
+                    btn.className = 'px-3 py-1.5 rounded-lg bg-white shadow-xs text-indigo-600 transition';
+                } else {
+                    btn.className = 'px-3 py-1.5 rounded-lg text-slate-600 transition';
+                }
+            });
+            updateChartData();
+        }
+
+        function updateChartData() {
+            const now = new Date();
+            let filteredLogs = logs;
+            if (currentGraphPeriod === 'day') {
+                filteredLogs = logs.filter(l => new Date(l.date).toDateString() === now.toDateString());
+            } else if (currentGraphPeriod === 'week') {
+                const oneWeekAgo = new Date(); oneWeekAgo.setDate(now.getDate() - 7);
+                filteredLogs = logs.filter(l => new Date(l.date) >= oneWeekAgo);
+            } else if (currentGraphPeriod === 'month') {
+                const oneMonthAgo = new Date(); oneMonthAgo.setMonth(now.getMonth() - 1);
+                filteredLogs = logs.filter(l => new Date(l.date) >= oneMonthAgo);
+            }
+
+            const subjectTotals = {};
+            let totalSeconds = 0;
+            filteredLogs.forEach(l => {
+                subjectTotals[l.subjectId] = (subjectTotals[l.subjectId] || 0) + l.duration;
+                totalSeconds += l.duration;
+            });
+
+            const totalMins = Math.round(totalSeconds / 60);
+            document.getElementById('total-study-time-display').innerText = `${Math.floor(totalMins / 60)}時間 ${totalMins % 60}分`;
+
+            const labels = [], data = [], backgroundColors = [];
+            subjects.forEach(sub => {
+                const sec = subjectTotals[sub.id] || 0;
+                if (sec > 0) {
+                    labels.push(sub.name);
+                    data.push(Math.round(sec / 60));
+                    backgroundColors.push(sub.color);
+                }
+            });
+
+            if (data.length === 0) { labels.push('データなし'); data.push(1); backgroundColors.push('#cbd5e1'); }
+            myChart.data.labels = labels;
+            myChart.data.datasets[0].data = data;
+            myChart.data.datasets[0].backgroundColor = backgroundColors;
+            myChart.update();
+        }
+
+        function downloadCode() {
+            const blob = new Blob([document.documentElement.outerHTML], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'StudyLog_App.txt';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
